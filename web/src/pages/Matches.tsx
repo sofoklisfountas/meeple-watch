@@ -27,7 +27,7 @@ export function Matches({ data, run, go }: { data: Data; run: Run; go: (p: Page)
   const days = useMemo(() => {
     const out: { label: string; posts: Post[] }[] = [];
     for (const p of list) {
-      const label = dayLabel(p.foundAt);
+      const label = dayLabel(p.time);
       if (out.at(-1)?.label === label) out.at(-1)!.posts.push(p);
       else out.push({ label, posts: [p] });
     }
@@ -242,7 +242,7 @@ function PostCard({ p, reel, terms, wishStats, statsOf, onOpen, onRead, onDismis
             <span className="truncate text-[14px] font-semibold">{author || 'Facebook post'}</span>
             {unread && <span className="h-2 w-2 shrink-0 rounded-full bg-indigo-500" title="New" />}
           </div>
-          <div className="truncate text-xs text-zinc-500">{p.groupName} · {timeAgo(p.foundAt)}</div>
+          <div className="truncate text-xs text-zinc-500">{p.groupName} · <span title={new Date(p.time).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })}>{p.postedAt ? timeAgo(p.postedAt) : `seen ${timeAgo(p.foundAt)}`}</span></div>
         </div>
         <button
           onClick={onDismiss}

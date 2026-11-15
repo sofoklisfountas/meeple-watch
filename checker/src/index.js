@@ -9,7 +9,7 @@ import { loadCatalog, lineGames } from './lines.js';
 import { enrichFromApi } from './enrich.js';
 import { env, log, sleep, SCROLLS, PID_FILE, LOGIN_LOCK } from './config.js';
 import { buildIndex, findMatches, snippet, textKey, normalize } from '../../shared/match.js';
-import { resolvePost } from '../../shared/facebook.js';
+import { resolvePost, postedAtFor } from '../../shared/facebook.js';
 
 const ONCE = process.argv.includes('--once');
 const TICK_MS = 10_000;
@@ -83,6 +83,7 @@ async function runScan(settings) {
         patch.last_post_count = res.posts.length;
         posts += res.posts.length;
         const rows = [];
+        const updMatches = new Map();
         const postRows = new Map();
         const statRows = new Map();
         const catalog = loadCatalog();
@@ -97,25 +98,46 @@ async function runScan(settings) {
             url: ref ? ref.url : g.url, exact_link: !!ref,
             post_text: p.text.slice(0, 4000), images: p.images || [], line_games: lg.lineGames,
           };
-          // Every post is saved. Feed is newest first: keep that order with 1 s steps
-          // (time = first seen; Facebook hides real post times).
-          if (!postRows.has(key)) postRows.set(key, { id: key, ...base, found_at: new Date(seenAt - i * 1000).toISOString() });
+          // Every post is saved, and refreshed on every check (like a feed: latest text, photos, SOLD, post time).
+          // found_at = first seen (1 s steps keep feed order); only set when the post is new.
+          const posted_at = postedAtFor(key, res.found);
+          if (!postRows.has(key)) postRows.set(key, { id: key, ...base, posted_at, found_at: new Date(seenAt - i * 1000).toISOString() });
           for (const { game, term } of findMatches([p.text, ...p.alts].join('\n'), index)) {
             const id = `${key}|${game.id}`;
             const snip = snippet(p.text, term);
-            if (seenIds.has(id) || seenSnips.has(`${game.id}|${snip}`)) continue;
+            const row = { id, game_id: game.id, game_name: game.name, thumbnail: game.thumbnail, snippet: snip, ...base };
+            if (seenIds.has(id)) { updMatches.set(id, row); continue; } // known: refresh it
+            if (seenSnips.has(`${game.id}|${snip}`)) continue; // same text already matched under another post
             seenIds.add(id);
             seenSnips.add(`${game.id}|${snip}`);
-            rows.push({ id, game_id: game.id, game_name: game.name, thumbnail: game.thumbnail, snippet: snip, ...base });
+            rows.push(row);
           }
         });
-        if (postRows.size) await q(db.from('posts').upsert([...postRows.values()], { onConflict: 'id', ignoreDuplicates: true }));
+        let updated = 0, added = 0;
+        if (postRows.size) {
+          const all = [...postRows.values()];
+          const existing = new Set((await q(db.from('posts').select('id').in('id', all.map((r) => r.id)))).map((r) => r.id));
+          const fresh = all.filter((r) => !existing.has(r.id));
+          if (fresh.length) await q(db.from('posts').upsert(fresh, { onConflict: 'id', ignoreDuplicates: true }));
+          // Saved posts: replace content with the latest version. Keep found_at and dismissed;
+          // keep the old post time if Facebook didn't give one this time.
+          const old = all.filter((r) => existing.has(r.id)).map(({ found_at, ...r }) => r);
+          const withTime = old.filter((r) => r.posted_at);
+          const noTime = old.filter((r) => !r.posted_at).map(({ posted_at, ...r }) => r);
+          if (withTime.length) await q(db.from('posts').upsert(withTime, { onConflict: 'id' }));
+          if (noTime.length) await q(db.from('posts').upsert(noTime, { onConflict: 'id' }));
+          updated = old.length;
+          added = fresh.length;
+        }
+        const timed = [...postRows.values()].filter((r) => r.posted_at).length;
         if (statRows.size) await q(db.from('bgg_games').upsert([...statRows.values()], { onConflict: 'bgg_id' }));
         if (rows.length) {
           await q(db.from('matches').upsert(rows, { onConflict: 'id', ignoreDuplicates: true }));
           found += rows.length;
         }
-        log(`  ${g.name || g.fb_id}: ${res.posts.length} posts, ${rows.length} new matches`);
+        // Known wishlist hits: latest text/photos too. read, dismissed and found_at are not sent, so they stay.
+        if (updMatches.size) await q(db.from('matches').upsert([...updMatches.values()], { onConflict: 'id' }));
+        log(`  ${g.name || g.fb_id}: ${res.posts.length} posts (${added} new, ${updated} refreshed), ${rows.length} new matches, ${timed} with post time`);
       }
       await q(db.from('groups').update(patch).eq('id', g.id));
       if (res.error === 'LOGIN') { loggedOut = true; return 'stop'; }

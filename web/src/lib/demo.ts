@@ -39,7 +39,7 @@ export function demoData(): Data {
   };
   const fp = (id: string, gr: number, min: number, post_text: string, images: string[] = []): FeedPost => ({
     id, group_id: groups[gr].id, group_name: groups[gr].name, url: groups[gr].url, exact_link: true,
-    post_text, images, line_games: {}, found_at: ago(min), dismissed: false,
+    post_text, images, line_games: {}, found_at: ago(Math.min(min, 10)), posted_at: ago(min), dismissed: false,
   });
   const posts: FeedPost[] = [
     fp('p1', 1, 12, 'Γιώργος Κ.\nΞεκαθάρισμα συλλογής!\nCodenames 12\nDixit 18\nCarcassonne + Inns & Cathedrals 25\nSplendor 15 (ΠΟΥΛΗΘΗΚΕ)\nΠαραλαβή Πειραιάς', ['https://picsum.photos/seed/meeple4/600/400']),

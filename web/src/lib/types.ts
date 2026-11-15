@@ -63,6 +63,8 @@ export interface FeedPost {
   images: string[];
   line_games: Record<string, string>;
   found_at: string;
+  /** Real Facebook post time, when known. */
+  posted_at?: string | null;
   dismissed: boolean;
 }
 

@@ -120,3 +120,7 @@ end $$;
 
 -- Accent color (see migrations/004_accent.sql).
 alter table public.settings add column if not exists accent text;
+
+-- Real Facebook post time (see migrations/005_posted_at.sql).
+alter table public.posts add column if not exists posted_at timestamptz;
+create index if not exists posts_posted_at_idx on public.posts (posted_at desc);

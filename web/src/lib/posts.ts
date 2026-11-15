@@ -17,11 +17,15 @@ export interface Post {
   /** Only wishlist hits can be unread. */
   read: boolean;
   foundAt: string;
+  /** When it was posted on Facebook (null = unknown, then foundAt is used). */
+  postedAt: string | null;
+  /** Time to show and sort by: posted time, else first-seen time. */
+  time: string;
 }
 
 const keyOf = (m: Match) => m.id.split('|')[0];
 
-/** All posts from the last week, newest first. */
+/** All posts from the last week, newest first by their real Facebook post time. */
 export function buildFeed(posts: FeedPost[], matches: Match[], days = FEED_DAYS): Post[] {
   const byKey = new Map<string, Match[]>();
   for (const m of matches) byKey.set(keyOf(m), [...(byKey.get(keyOf(m)) || []), m]);
@@ -35,6 +39,8 @@ export function buildFeed(posts: FeedPost[], matches: Match[], days = FEED_DAYS)
       read: ms.every((m) => m.read),
       // A wishlist hit may be older than the post row (saved before all posts were kept).
       foundAt: [p.found_at, ...ms.map((m) => m.found_at)].sort()[0],
+      postedAt: p.posted_at ?? null,
+      time: '',
     });
   }
   // Wishlist hits whose post isn't in the posts table.
@@ -45,11 +51,15 @@ export function buildFeed(posts: FeedPost[], matches: Match[], days = FEED_DAYS)
       key, url: first.url, exactLink: first.exact_link, groupName: first.group_name,
       text: first.post_text ?? (ms.some((m) => m.snippet) ? `\n${ms.map((m) => m.snippet).filter(Boolean).join('\n')}` : null),
       images: first.images || [], lineGames: first.line_games || {}, matches: ms, ids: ms.map((m) => m.id),
-      read: ms.every((m) => m.read), foundAt: ms.map((m) => m.found_at).sort()[0],
+      read: ms.every((m) => m.read), foundAt: ms.map((m) => m.found_at).sort()[0], postedAt: null, time: '',
     });
   }
-  const since = new Date(Date.now() - days * 864e5).toISOString();
-  return [...out.values()].filter((p) => p.foundAt >= since).sort((a, b) => b.foundAt.localeCompare(a.foundAt));
+  const since = Date.now() - days * 864e5;
+  const ms = (iso: string) => new Date(iso).getTime();
+  return [...out.values()]
+    .map((p) => ({ ...p, time: p.postedAt || p.foundAt }))
+    .filter((p) => ms(p.time) >= since)
+    .sort((a, b) => ms(b.time) - ms(a.time));
 }
 
 /** "Today", "Yesterday", "Thursday 12 Nov". */

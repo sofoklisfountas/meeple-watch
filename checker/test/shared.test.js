@@ -69,3 +69,20 @@ test('parseImportFile: BGG CSV and plain list', () => {
     best_players: [4], rec_players: [2, 3, 4], min_time: 30, max_time: 60, owned: 22280,
   });
 });
+
+import { extractPostTimes, postedAtFor } from '../../shared/facebook.js';
+
+test('extractPostTimes: post ids, and listings linked through story_id', () => {
+  const story = Buffer.from('S:_I681619480:VK:4643722922539724').toString('base64');
+  const text =
+    '{"post_id":"4643722922539724","creation_time":1794777720,"x":1}' +
+    '{"target":{"id":"1474769618090266","__typename":"GroupCommerceProductItem","is_sold":false,"story_id":"' + story + '"}}' +
+    '{"post_id":"111","creation_time":1794700000}';
+  const found = extractPostTimes(text);
+  assert.equal(found.times['111'], 1794700000);
+  assert.equal(found.listings['1474769618090266'], '4643722922539724');
+  assert.equal(postedAtFor('post:111', found), new Date(1794700000 * 1000).toISOString());
+  assert.equal(postedAtFor('listing:1474769618090266', found), new Date(1794777720 * 1000).toISOString());
+  assert.equal(postedAtFor('text:abc', found), null);
+  assert.equal(postedAtFor('post:999', found), null);
+});

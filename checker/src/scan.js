@@ -1,5 +1,6 @@
 import { launch, hasFacebookLogin, firstPage } from './browser.js';
 import { sleep } from './config.js';
+import { extractPostTimes } from '../../shared/facebook.js';
 
 /**
  * Opens each group (newest posts first), scrolls a bit, and returns the raw posts.
@@ -13,6 +14,24 @@ export async function scanGroups(groups, { scrolls, onStart, onResult }) {
       return;
     }
     const page = await firstPage(browser);
+    // Read real post times from Facebook's own data as it loads (API responses while scrolling).
+    await page.evaluateOnNewDocument(`(() => {
+      const extractPostTimes = ${extractPostTimes.toString()};
+      window.__mwFound = { times: {}, listings: {} };
+      window.__mwExtract = extractPostTimes;
+      const keep = (t) => { try { extractPostTimes(t, window.__mwFound); } catch {} };
+      const open = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function (...a) {
+        this.addEventListener('load', () => { try { if (typeof this.responseText === 'string') keep(this.responseText); } catch {} });
+        return open.apply(this, a);
+      };
+      const f = window.fetch;
+      window.fetch = async (...a) => {
+        const r = await f(...a);
+        try { r.clone().text().then(keep, () => {}); } catch {}
+        return r;
+      };
+    })();`);
     for (let i = 0; i < groups.length; i++) {
       const g = groups[i];
       await onStart?.(g, i);
@@ -104,5 +123,12 @@ async function pageScrape({ scrolls }) {
     });
     if (posts.length >= 100) break;
   }
-  return { title, posts };
+  // Real post times: first batch is in <script> tags, later batches were caught from API responses.
+  const found = window.__mwFound || { times: {}, listings: {} };
+  const extract = window.__mwExtract;
+  for (const s of document.querySelectorAll('script')) {
+    const t = s.textContent || '';
+    if (t.includes('creation_time')) extract?.(t, found);
+  }
+  return { title, posts, found };
 }
