@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/* Dark theme only: every dark: class always applies (html has class="dark"). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", Roboto, system-ui, -apple-system, sans-serif;
+
+  /* "indigo" is the accent: its shades come from the chosen pastel color (--accent). */
+  --color-indigo-50: color-mix(in oklab, var(--accent) 15%, white);
+  --color-indigo-100: color-mix(in oklab, var(--accent) 30%, white);
+  --color-indigo-200: color-mix(in oklab, var(--accent) 50%, white);
+  --color-indigo-300: color-mix(in oklab, var(--accent) 70%, white);
+  --color-indigo-400: color-mix(in oklab, var(--accent) 85%, white);
+  --color-indigo-500: color-mix(in oklab, var(--accent) 92%, white);
+  --color-indigo-600: var(--accent);
+  --color-indigo-700: color-mix(in oklab, var(--accent) 75%, #09090b);
+  --color-indigo-800: color-mix(in oklab, var(--accent) 55%, #09090b);
+  --color-indigo-900: color-mix(in oklab, var(--accent) 35%, #09090b);
+  --color-indigo-950: color-mix(in oklab, var(--accent) 20%, #09090b);
+  /* Text on accent-filled buttons/chips (pastels need dark text). */
+  --color-accent-fg: #18181b;
+}
+
+/* Pastel accents (Settings → Appearance). Keep in sync with lib/accent.ts. */
+:root { --accent: #b4a7f5; }
+:root[data-accent="lavender"] { --accent: #b4a7f5; }
+:root[data-accent="sky"] { --accent: #9ec5fe; }
+:root[data-accent="mint"] { --accent: #9ee6c4; }
+:root[data-accent="aqua"] { --accent: #8fe3e8; }
+:root[data-accent="peach"] { --accent: #ffc09f; }
+:root[data-accent="rose"] { --accent: #f9a8c9; }
+:root[data-accent="lemon"] { --accent: #f3e08a; }
+:root[data-accent="lilac"] { --accent: #e0b0f5; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+:root {
+  color-scheme: dark;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  @apply bg-zinc-950 text-zinc-100 antialiased select-none;
+}
+
+input,
+textarea {
+  @apply select-text;
+}

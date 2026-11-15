@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+*.csv
+*.zip
+.env.*
+!.env.example
+
+# Personal notes for Claude (not for the public repo)
+CLAUDE.md
