@@ -143,6 +143,20 @@ function Lightbox({ imgs, start, onClose }: { imgs: string[]; start: number; onC
   const go = (d: number) => setI((x) => (x + d + n) % n);
   // Touch drag: the photo follows the finger; let go past 60 px → next/previous, swipe down → close.
   const touch = useRef<{ x: number; y: number } | null>(null);
+  // Mouse wheel: down = next, up = previous (wraps). One photo per gesture, so a trackpad's
+  // stream of small wheel events doesn't fly through all photos.
+  const wheel = useRef({ sum: 0, last: 0 });
+  const onWheel = (e: React.WheelEvent) => {
+    if (n < 2) return;
+    const now = Date.now();
+    const w = wheel.current;
+    if (now - w.last < 280) return; // still the same gesture
+    w.sum += e.deltaY || e.deltaX;
+    if (Math.abs(w.sum) < 30) return;
+    go(w.sum > 0 ? 1 : -1);
+    w.sum = 0;
+    w.last = now;
+  };
   const [drag, setDrag] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -165,6 +179,7 @@ function Lightbox({ imgs, start, onClose }: { imgs: string[]; start: number; onC
     <div
       className="fixed inset-0 z-[80] flex animate-[fadeIn_.15s_ease-out] flex-col bg-zinc-950/95 backdrop-blur-sm"
       onClick={onClose}
+      onWheel={onWheel}
       onTouchStart={(e) => (touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY })}
       onTouchMove={(e) => {
         if (!touch.current) return;
