@@ -59,7 +59,9 @@ export function buildFeed(posts: FeedPost[], matches: Match[], days = FEED_DAYS)
   return [...out.values()]
     .map((p) => ({ ...p, time: p.postedAt || p.foundAt }))
     .filter((p) => ms(p.time) >= since)
-    .sort((a, b) => ms(b.time) - ms(a.time));
+    // Real post time first (Facebook's order). Posts with unknown time go last: they are older
+    // posts we only saw once, so their first-seen time says nothing about when they were posted.
+    .sort((a, b) => Number(!a.postedAt) - Number(!b.postedAt) || ms(b.time) - ms(a.time));
 }
 
 /** "Today", "Yesterday", "Thursday 12 Nov". */

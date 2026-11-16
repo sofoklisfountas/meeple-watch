@@ -27,7 +27,7 @@ export function Matches({ data, run, go }: { data: Data; run: Run; go: (p: Page)
   const days = useMemo(() => {
     const out: { label: string; posts: Post[] }[] = [];
     for (const p of list) {
-      const label = dayLabel(p.time);
+      const label = p.postedAt ? dayLabel(p.postedAt) : 'Time unknown';
       if (out.at(-1)?.label === label) out.at(-1)!.posts.push(p);
       else out.push({ label, posts: [p] });
     }

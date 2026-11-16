@@ -80,49 +80,69 @@ async function pageScrape({ scrolls }) {
       }
     });
 
-  for (let r = 0; r < scrolls; r++) {
-    expand();
-    // Jump to the bottom so Facebook loads the next batch, then wait for it.
-    const before = feed.children.length;
-    window.scrollTo(0, document.documentElement.scrollHeight);
-    for (let w = 0; w < 10 && feed.children.length === before; w++) await sleep(400);
-    await sleep(800 + Math.random() * 1000);
-  }
-  expand();
-  await sleep(600);
-
-  // Facebook fills in post links only on hover/focus.
-  feed = document.querySelector('[role="feed"]');
-  for (const a of feed.querySelectorAll('a')) {
-    const h = a.getAttribute('href');
-    if (!h || h.startsWith('#')) {
-      a.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-      try { a.focus({ preventScroll: true }); } catch {}
-    }
-  }
-  await sleep(800);
-
   // Facebook pads posts with junk ("Facebook" repeated, single scrambled letters). Keep real lines only.
   const JUNK = /^((Facebook\s*)+|Follow|Message again|Message|Comment as .*|Like|Comment|Share|Send|Reply|Write a comment.*|See more|See less|Δείτε περισσότερα|Λιγότερα)$/i;
+  const HEADER = /^(sort group feed by|new listings|featured)\b/i; // feed headers, not posts
   const clean = (t) =>
     t.split('\n').map((l) => l.replace(/͏/g, '').replace(/…\s*See more$/i, '…').trim())
       .filter((l) => l.length > 2 && !JUNK.test(l)).join('\n');
+  const POST_ID = /\/(?:posts|permalink)\/(\d+)|multi_permalinks=(\d+)|set=(?:pcb|gm)\.(\d+)|story_fbid=(\d+)|\/commerce\/listing\/(\d+)|\/marketplace\/item\/(\d+)/;
 
-  const posts = [];
-  for (const unit of feed.children) {
-    const text = clean(unit.innerText || '');
-    if (text.length < 20) continue;
-    posts.push({
-      text: text.slice(0, 5000),
-      alts: [...unit.querySelectorAll('img[alt]')].map((i) => i.alt).filter((a) => a && a.length > 3).slice(0, 10),
-      // Post photos (skip avatars/emoji: only big images from Facebook's photo servers).
-      images: [...new Set([...unit.querySelectorAll('img')]
-        .filter((i) => /scontent|fbcdn/.test(i.src) && (i.naturalWidth >= 160 || i.width >= 160))
-        .map((i) => i.src))].slice(0, 6),
-      links: [...unit.querySelectorAll('a[href]')].map((a) => a.href).slice(0, 80),
+  // Facebook only fills in a post while it is on screen (and its link only on hover), and empties
+  // posts far away again. So scroll down step by step and collect every post while it is visible.
+  const seen = new Map(); // key -> post (longest version wins)
+  const harvest = async () => {
+    expand();
+    const near = [...feed.children].filter((u) => {
+      const r = u.getBoundingClientRect();
+      return r.bottom > -innerHeight && r.top < innerHeight * 2;
     });
-    if (posts.length >= 100) break;
+    for (const u of near)
+      for (const a of u.querySelectorAll('a')) {
+        const h = a.getAttribute('href');
+        if (!h || h.startsWith('#')) {
+          a.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+          try { a.focus({ preventScroll: true }); } catch {}
+        }
+      }
+    await sleep(350);
+    for (const u of near) {
+      const text = clean(u.innerText || '');
+      if (text.length < 20 || HEADER.test(text)) continue;
+      const links = [...u.querySelectorAll('a[href]')].map((a) => a.href);
+      const idLink = links.map((l) => (l.match(POST_ID) || []).slice(1).find(Boolean)).find(Boolean);
+      const key = idLink ? `id:${idLink}` : `t:${text.slice(0, 80)}`;
+      const post = {
+        text: text.slice(0, 5000),
+        alts: [...u.querySelectorAll('img[alt]')].map((i) => i.alt).filter((a) => a && a.length > 3).slice(0, 10),
+        // Post photos (skip avatars/emoji: only big images from Facebook's photo servers).
+        images: [...new Set([...u.querySelectorAll('img')]
+          .filter((i) => /scontent|fbcdn/.test(i.src) && (i.naturalWidth >= 160 || i.width >= 160))
+          .map((i) => i.src))].slice(0, 6),
+        links: links.slice(0, 80),
+        order: seen.get(key)?.order ?? seen.size,
+      };
+      const old = seen.get(key);
+      if (!old || post.text.length > old.text.length || (post.text.length === old.text.length && post.images.length > old.images.length)) seen.set(key, post);
+    }
+  };
+
+  const steps = scrolls * 4;
+  let still = 0;
+  for (let s = 0; s < steps && seen.size < 100; s++) {
+    await harvest();
+    const y = window.scrollY;
+    const before = feed.children.length;
+    window.scrollBy(0, Math.round(innerHeight * 0.8));
+    for (let w = 0; w < 6 && feed.children.length === before && window.scrollY + innerHeight >= document.documentElement.scrollHeight - 50; w++) await sleep(400);
+    await sleep(500 + Math.random() * 500);
+    feed = document.querySelector('[role="feed"]') || feed;
+    still = window.scrollY === y ? still + 1 : 0;
+    if (still >= 3) break; // end of the feed
   }
+  await harvest();
+
+  const posts = [...seen.values()].sort((a, b) => a.order - b.order).map(({ order, ...p }) => p);
   // Real post times: first batch is in <script> tags, later batches were caught from API responses.
   const found = window.__mwFound || { times: {}, listings: {} };
   const extract = window.__mwExtract;

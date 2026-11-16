@@ -12,6 +12,7 @@ import { buildIndex, findMatches, snippet, textKey, normalize } from '../../shar
 import { resolvePost, postedAtFor } from '../../shared/facebook.js';
 
 const ONCE = process.argv.includes('--once');
+const DEEP = process.argv.includes('--deep'); // one-off: scroll every group deep (fill in older posts)
 const TICK_MS = 10_000;
 const ERRORS = {
   LOGIN: 'Facebook logged out. Run "connect-facebook" on your PC.',
@@ -69,7 +70,7 @@ async function runScan(settings) {
 
   await scanGroups(groups, {
     // Groups with no posts saved this week get one deep scroll, to fill in the last days.
-    scrolls: (g) => (hasPosts.has(g.id) ? SCROLLS[settings.scan_depth] || SCROLLS.normal : SCROLLS.deep),
+    scrolls: (g) => (!DEEP && hasPosts.has(g.id) ? SCROLLS[settings.scan_depth] || SCROLLS.normal : SCROLLS.deep),
     onStart: (g, i) => pushStatus({ progress: { done: i, total: groups.length, current: g.name || g.fb_id } }),
     onResult: async (g, res) => {
       const patch = { last_checked_at: new Date().toISOString() };
