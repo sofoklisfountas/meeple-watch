@@ -41,6 +41,10 @@ export function demoData(): Data {
     id, group_id: groups[gr].id, group_name: groups[gr].name, url: groups[gr].url, exact_link: true,
     post_text, images, line_games: {}, found_at: ago(Math.min(min, 10)), posted_at: ago(min), dismissed: false,
   });
+  const np = (bgg_id: string, price: number | null, country = 'GR', in_stock = true) => ({ bgg_id, price, country, in_stock, url: 'https://boardgameprices.eu/', checked_at: ago(60) });
+  const prices = {
+    '224517': np('224517', 118.9), '295947': np('295947', 31.5), '230802': np('230802', 22, 'DE'), '342942': np('342942', 52.9, 'GR', false),
+  };
   const posts: FeedPost[] = [
     fp('p1', 1, 12, 'Γιώργος Κ.\nΞεκαθάρισμα συλλογής!\nCodenames 12\nDixit 18\nCarcassonne + Inns & Cathedrals 25\nSplendor 15 (ΠΟΥΛΗΘΗΚΕ)\nΠαραλαβή Πειραιάς', ['https://picsum.photos/seed/meeple4/600/400']),
     fp('p5', 0, 20, 'Κώστας Μ.\nΠωλούνται όλα μαζί ή χωριστά\nGloomhaven 90€\nNemesis 80€\nDune Imperium 35€', [1, 2, 3, 4, 5, 6].map((n) => `https://picsum.photos/seed/mwcar${n}/800/600`)),
@@ -50,7 +54,7 @@ export function demoData(): Data {
 
   ];
   return {
-    groups, games, matches, posts, bgg,
+    groups, games, matches, posts, bgg, prices,
     settings: {
       id: 1, interval_minutes: 30, scan_depth: 'normal', paused: false, bgg_username: '',
       check_requested_at: null, bgg_sync_requested_at: null, bgg_sync_result: null,

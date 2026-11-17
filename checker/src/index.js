@@ -7,6 +7,7 @@ import { fetchWishlist } from './bgg.js';
 import { migrate } from './migrate.js';
 import { loadCatalog, lineGames } from './lines.js';
 import { enrichFromApi } from './enrich.js';
+import { refreshPrices } from './prices.js';
 import { env, log, sleep, SCROLLS, PID_FILE, LOGIN_LOCK } from './config.js';
 import { buildIndex, findMatches, snippet, textKey, normalize } from '../../shared/match.js';
 import { resolvePost, postedAtFor } from '../../shared/facebook.js';
@@ -148,6 +149,7 @@ async function runScan(settings) {
   log(`Scan done: ${posts} posts, ${found} new matches`);
   await q(db.from('posts').delete().lt('found_at', new Date(Date.now() - 30 * 864e5).toISOString())).catch((e) => log(e.message));
   await enrichFromApi(db).catch((e) => log(`BGG API: ${e.message}`));
+  await refreshPrices(db).catch((e) => log(`Prices: ${e.message}`));
   await pushStatus({
     state: 'idle', progress: null, fbConnected: !loggedOut,
     lastScanAt: new Date().toISOString(),

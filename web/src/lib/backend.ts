@@ -40,11 +40,14 @@ function supabaseBackend(sb: SupabaseClient): Backend {
       for (const g of games as { bgg_id: string | null }[]) if (g.bgg_id) ids.add(g.bgg_id);
       const list = [...ids];
       const bgg: Record<string, unknown> = {};
+      const prices: Record<string, unknown> = {};
       for (let i = 0; i < list.length; i += 200) {
         const rows = await ok(sb.from('bgg_games').select('*').in('bgg_id', list.slice(i, i + 200)));
         for (const r of rows as { bgg_id: string }[]) bgg[r.bgg_id] = r;
+        const pr = await ok(sb.from('prices').select('*').in('bgg_id', list.slice(i, i + 200)));
+        for (const r of pr as { bgg_id: string }[]) prices[r.bgg_id] = r;
       }
-      return { groups, games, matches, posts, settings, bgg } as Data;
+      return { groups, games, matches, posts, settings, bgg, prices } as Data;
     },
     async insert(table, rows) {
       await ok(sb.from(table).insert(rows));

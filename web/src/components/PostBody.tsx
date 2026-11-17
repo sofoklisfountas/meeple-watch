@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { ChevronDown, Heart } from 'lucide-react';
 import { cx } from './ui';
 import { GameInfo } from './GameInfo';
-import type { GameStats } from '../lib/types';
+import type { GameStats, NewPrice } from '../lib/types';
+import { saving } from '../../../shared/prices.js';
 import { normalize } from '../../../shared/match.js';
 import { isBareMode, parseLine } from '../lib/postFormat';
 
@@ -16,13 +17,15 @@ export function splitPost(text: string) {
   return { author: first, body: rest.filter(Boolean) };
 }
 
-export function PostBody({ body, terms, lineGames, stats, full }: {
+export function PostBody({ body, terms, lineGames, stats, priceOf, full }: {
   body: string[];
   /** Show every line (no "N more lines"). */
   full?: boolean;
   terms: string[];
   lineGames?: Record<string, string>;
   stats?: (bggId: string) => GameStats | undefined;
+  /** New shop price for a BGG id. */
+  priceOf?: (bggId: string) => NewPrice | undefined;
 }) {
   const [open, setOpen] = useState(false);
   if (!body.length) return null;
@@ -31,7 +34,8 @@ export function PostBody({ body, terms, lineGames, stats, full }: {
     const game = lineGames?.[l] ? stats?.(lineGames[l]) : undefined;
     const names = [...terms, ...(game ? [normalize(game.name), normalize(game.name.split(':')[0])] : [])];
     const r = parseLine(l, terms, names, bare);
-    return { ...r, game, item: !!(r.price || game || r.mine || r.sold) };
+    const np = lineGames?.[l] ? priceOf?.(lineGames[l]) : undefined;
+    return { ...r, game, np: np?.price ? np : undefined, item: !!(r.price || game || r.mine || r.sold) };
   });
   // Collapsed: first lines + any line with your game, so hits are never hidden.
   const long = !full && rows.length > PREVIEW + 2;
@@ -75,9 +79,14 @@ export function PostBody({ body, terms, lineGames, stats, full }: {
                 {name}
               </span>
               {r.sold && <span className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-zinc-400">Sold</span>}
-              {r.price && (
-                <span className={cx('shrink-0 font-semibold tabular-nums', r.sold ? 'text-zinc-300 line-through dark:text-zinc-600' : r.mine ? 'text-indigo-600 dark:text-indigo-300' : 'text-zinc-900 dark:text-zinc-100')}>
-                  {r.price}
+              {(r.price || r.np) && (
+                <span className="flex shrink-0 flex-col items-end">
+                  {r.price && (
+                    <span className={cx('font-semibold tabular-nums', r.sold ? 'text-zinc-300 line-through dark:text-zinc-600' : r.mine ? 'text-indigo-600 dark:text-indigo-300' : 'text-zinc-900 dark:text-zinc-100')}>
+                      {r.price}
+                    </span>
+                  )}
+                  {r.np && !r.sold && <NewPriceTag np={r.np} used={r.price} />}
                 </span>
               )}
             </li>
@@ -94,5 +103,31 @@ export function PostBody({ body, terms, lineGames, stats, full }: {
         </button>
       )}
     </div>
+  );
+}
+
+const euro = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(2).replace('.', ',')}€`;
+
+/** "new 36€ · −25%" under the used price. Green = good deal, red = dearer than new. */
+function NewPriceTag({ np, used }: { np: NewPrice; used: string | null }) {
+  const u = used ? Number(used.replace('€', '').replace(',', '.')) : 0;
+  const s = saving(u, np.price);
+  const pct = s == null ? null : Math.round(s * 100);
+  const where = np.country && np.country !== 'GR' ? ` · ${np.country}` : '';
+  const tip = `New price: ${euro(np.price!)} at ${np.country === 'GR' ? 'a Greek shop' : `a shop in ${np.country || '?'}`}${np.in_stock ? '' : ' (out of stock)'}, without shipping. From boardgameprices.eu`;
+  const Tag = np.url ? 'a' : 'span';
+  return (
+    <Tag
+      {...(np.url ? { href: np.url, target: '_blank', rel: 'noreferrer' } : {})}
+      title={tip}
+      className="mt-0.5 whitespace-nowrap text-[11px] tabular-nums text-zinc-500 hover:text-zinc-300"
+    >
+      new {euro(np.price!)}{where}
+      {pct != null && pct !== 0 && (
+        <span className={cx('ml-1 rounded px-1 py-px font-semibold', pct >= 30 ? 'bg-emerald-500/15 text-emerald-300' : pct > 0 ? 'text-zinc-300' : 'bg-rose-500/15 text-rose-300')}>
+          {pct > 0 ? `−${pct}%` : `+${-pct}%`}
+        </span>
+      )}
+    </Tag>
   );
 }

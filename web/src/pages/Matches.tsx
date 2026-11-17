@@ -6,7 +6,7 @@ import { backend } from '../lib/backend';
 import { checkerView } from '../lib/status';
 import { timeAgo } from '../lib/time';
 import { buildFeed, dayLabel, FEED_DAYS, type Post } from '../lib/posts';
-import { mergeStats, type Data } from '../lib/types';
+import { mergeStats, type Data, type NewPrice } from '../lib/types';
 import type { Run } from '../lib/useData';
 import type { Page } from '../App';
 import { PostBody, splitPost } from '../components/PostBody';
@@ -49,6 +49,8 @@ export function Matches({ data, run, go }: { data: Data; run: Run; go: (p: Page)
     return g ? mergeStats(data.bgg[bggId], g) : data.bgg[bggId];
   };
 
+  const priceOf = (bggId: string) => data.prices?.[bggId];
+
   const markRead = (ids: string[]) =>
     run(() => backend.update('matches', ids, { read: true }), (d) => ({
       ...d, matches: d.matches.map((m) => (ids.includes(m.id) ? { ...m, read: true } : m)),
@@ -76,6 +78,7 @@ export function Matches({ data, run, go }: { data: Data; run: Run; go: (p: Page)
       terms={termsOf(p)}
       wishStats={wishStats}
       statsOf={statsOf}
+      priceOf={priceOf}
       onOpen={() => open(p)}
       onRead={() => markRead(p.ids)}
       onDismiss={() => dismiss(p)}
@@ -211,12 +214,13 @@ function useMobile() {
   return m;
 }
 
-function PostCard({ p, reel, terms, wishStats, statsOf, onOpen, onRead, onDismiss }: {
+function PostCard({ p, reel, terms, wishStats, statsOf, priceOf, onOpen, onRead, onDismiss }: {
   p: Post;
   reel?: boolean;
   terms: string[];
   wishStats: (gameId: string | null) => ReturnType<typeof mergeStats>;
   statsOf: (bggId: string) => ReturnType<typeof mergeStats>;
+  priceOf: (bggId: string) => NewPrice | undefined;
   onOpen: () => void;
   onRead: () => void;
   onDismiss: () => void;
@@ -272,10 +276,10 @@ function PostCard({ p, reel, terms, wishStats, statsOf, onOpen, onRead, onDismis
       {reel ? (
         // Text scrolls inside the post; at its end the swipe moves to the next post.
         <div className={cx('-mx-2.5 min-h-0 overflow-y-auto px-2.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', p.images.length ? 'max-h-[42%] shrink-0' : 'flex-1')}>
-          <PostBody body={body} terms={terms} lineGames={p.lineGames} stats={statsOf} full />
+          <PostBody body={body} terms={terms} lineGames={p.lineGames} stats={statsOf} priceOf={priceOf} full />
         </div>
       ) : (
-        <PostBody body={body} terms={terms} lineGames={p.lineGames} stats={statsOf} />
+        <PostBody body={body} terms={terms} lineGames={p.lineGames} stats={statsOf} priceOf={priceOf} />
       )}
 
       {/* Footer */}

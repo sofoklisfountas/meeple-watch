@@ -119,6 +119,18 @@ export interface Data {
   posts: FeedPost[];
   settings: Settings;
   bgg: Record<string, GameStats>;
+  /** New (shop) price per BGG id. */
+  prices: Record<string, NewPrice>;
+}
+
+/** New price from boardgameprices.eu (product only, no shipping). price null = no shop. */
+export interface NewPrice {
+  bgg_id: string;
+  price: number | null;
+  country: string | null;
+  in_stock: boolean | null;
+  url: string | null;
+  checked_at: string;
 }
 
 /** Wishlist game + any extra stats known for it (non-empty values win). */
