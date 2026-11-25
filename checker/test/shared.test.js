@@ -60,7 +60,10 @@ test('resolvePost finds post links', () => {
 
 test('parseImportFile: BGG CSV and plain list', () => {
   const csv = 'objectname,objectid,wishlist,wishlistpriority,yearpublished\n"Brass: Birmingham",224517,1,1,2018\nCatan,13,0,0,1995\n"Bad, Game",1,1,5,2000\n';
-  assert.deepEqual(parseImportFile(csv), [{ name: 'Brass: Birmingham', bggId: '224517', year: '2018', priority: 1 }]);
+  assert.deepEqual(parseImportFile(csv)[0], { name: 'Brass: Birmingham', bggId: '224517', year: '2018', priority: 1 });
+  assert.equal(parseImportFile(csv).length, 3);
+  const wtb = 'objectname,objectid,wishlist,wishlistpriority,wanttobuy\nJaipur,54043,0,3,1\nTakenoko,70919,1,5,0\nCatan,13,0,3,0\n';
+  assert.deepEqual(parseImportFile(wtb).map((g) => g.name), ['Jaipur', 'Takenoko', 'Catan']);
   assert.deepEqual(parseImportFile('Root\n\nWingspan\r\n'), [{ name: 'Root' }, { name: 'Wingspan' }]);
   const full = 'objectname,objectid,wishlist,average,avgweight,rank,minplayers,maxplayers,bggbestplayers,bggrecplayers,minplaytime,maxplaytime,numowned\n' +
     'Abyss,155987,1,7.31702,2.3207,454,2,4,4,"2,3,4",30,60,22280\n';

@@ -24,7 +24,7 @@ export function parseCollectionXml(xml) {
         priority: Number(it.status?.wishlistpriority) || null,
       };
     })
-    .filter((g) => g.name && g.priority !== 5); // 5 = "Don't buy this"
+    .filter((g) => g.name);
 }
 
 async function fetchCollection(url, token) {
@@ -112,9 +112,10 @@ export async function fetchThings(ids, token) {
   throw new Error('BGG is busy');
 }
 
+/** Every game in your BGG collection, whatever its status (wishlist, want to buy/play, own...). */
 export async function fetchWishlist(username, token) {
-  const base = `https://boardgamegeek.com/xmlapi2/collection?username=${encodeURIComponent(username)}&wishlist=1`;
   const all = new Map();
+  const base = `https://boardgamegeek.com/xmlapi2/collection?username=${encodeURIComponent(username)}`;
   for (const subtype of ['boardgame', 'boardgameexpansion']) {
     for (const g of await fetchCollection(`${base}&subtype=${subtype}`, token)) all.set(g.bggId, g);
   }

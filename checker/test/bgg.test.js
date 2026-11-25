@@ -13,6 +13,7 @@ test('parses BGG wishlist XML, skips "don\'t buy"', () => {
       <status wishlist="1" wishlistpriority="3"/></item></items>`;
   assert.deepEqual(parseCollectionXml(xml), [
     { bggId: '224517', name: 'Brass: Birmingham', year: '2018', thumbnail: 'https://cf.geekdo-images.com/x.jpg', priority: 1 },
+    { bggId: '1', name: 'Bad & Game', year: null, thumbnail: null, priority: 5 },
     { bggId: '1830', name: '1830', year: null, thumbnail: null, priority: 3 },
   ]);
 });

@@ -20,7 +20,7 @@ export function parseCsv(text) {
   return rows.filter((r) => r.some((c) => c.trim()));
 }
 
-/** Returns [{ name, bggId?, year?, priority? }]. Skips "Don't buy this" (priority 5). */
+/** Returns [{ name, bggId?, year?, priority? }]. BGG CSV: every game in the file, whatever its status (one per BGG id). */
 export function parseImportFile(text) {
   text = String(text).replace(/^﻿/, '');
   const firstLine = text.split(/\r?\n/, 1)[0].toLowerCase();
@@ -29,6 +29,7 @@ export function parseImportFile(text) {
     const h = rows[0].map((x) => x.trim().toLowerCase());
     const col = (n) => h.indexOf(n);
     const [name, id, wl, pr, yr] = ['objectname', 'objectid', 'wishlist', 'wishlistpriority', 'yearpublished'].map(col);
+    const seen = new Set();
     const hasStats = col('average') >= 0;
     const num = (r, c, round = false) => {
       const v = Number(r[col(c)]);
@@ -37,12 +38,12 @@ export function parseImportFile(text) {
     const list = (r, c) => [...String(r[col(c)] ?? '').matchAll(/\d+/g)].map((m) => Number(m[0]));
     return rows
       .slice(1)
-      .filter((r) => r[name]?.trim() && (wl < 0 || r[wl] === '1') && (pr < 0 || r[pr] !== '5'))
+      .filter((r) => r[name]?.trim() && !(id >= 0 && r[id] && (seen.has(r[id].trim()) || !seen.add(r[id].trim()))))
       .map((r) => ({
         name: r[name].trim(),
         bggId: id >= 0 && r[id] ? r[id].trim() : null,
         year: yr >= 0 && r[yr] && r[yr] !== '0' ? r[yr].trim() : null,
-        priority: pr >= 0 ? Number(r[pr]) || null : null,
+        priority: pr >= 0 && wl >= 0 && r[wl] === '1' ? Number(r[pr]) || null : null,
         ...(hasStats && {
           stats: {
             rating: num(r, 'average') && Math.round(num(r, 'average') * 100) / 100,
