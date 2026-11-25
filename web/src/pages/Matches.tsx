@@ -64,10 +64,10 @@ export function Matches({ data, run, go }: { data: Data; run: Run; go: (p: Page)
   const dismiss = (p: Post) =>
     run(
       async () => {
-        await backend.update('posts', [p.key], { dismissed: true });
+        await backend.update('posts', p.keys, { dismissed: true });
         if (p.ids.length) await backend.update('matches', p.ids, { dismissed: true });
       },
-      (d) => ({ ...d, posts: d.posts.filter((x) => x.id !== p.key), matches: d.matches.filter((x) => !p.ids.includes(x.id)) }),
+      (d) => ({ ...d, posts: d.posts.filter((x) => !p.keys.includes(x.id)), matches: d.matches.filter((x) => !p.ids.includes(x.id)) }),
     );
 
   const card = (p: Post, reel = false) => (

@@ -5,6 +5,8 @@ export const FEED_DAYS = 7;
 /** One card per Facebook post: every post seen, plus the wishlist games it mentions (if any). */
 export interface Post {
   key: string;
+  /** All saved copies of this post (same post seen as "post" and "listing"). */
+  keys: string[];
   url: string;
   exactLink: boolean;
   groupName: string | null;
@@ -34,7 +36,7 @@ export function buildFeed(posts: FeedPost[], matches: Match[], days = FEED_DAYS)
   for (const p of posts) {
     const ms = byKey.get(p.id) || [];
     out.set(p.id, {
-      key: p.id, url: p.url, exactLink: p.exact_link, groupName: p.group_name, text: p.post_text,
+      key: p.id, keys: [p.id], url: p.url, exactLink: p.exact_link, groupName: p.group_name, text: p.post_text,
       images: p.images || [], lineGames: p.line_games || {}, matches: ms, ids: ms.map((m) => m.id),
       read: ms.every((m) => m.read),
       // A wishlist hit may be older than the post row (saved before all posts were kept).
@@ -48,15 +50,37 @@ export function buildFeed(posts: FeedPost[], matches: Match[], days = FEED_DAYS)
     if (out.has(key)) continue;
     const first = ms.find((m) => m.post_text) || ms[0];
     out.set(key, {
-      key, url: first.url, exactLink: first.exact_link, groupName: first.group_name,
+      key, keys: [key], url: first.url, exactLink: first.exact_link, groupName: first.group_name,
       text: first.post_text ?? (ms.some((m) => m.snippet) ? `\n${ms.map((m) => m.snippet).filter(Boolean).join('\n')}` : null),
       images: first.images || [], lineGames: first.line_games || {}, matches: ms, ids: ms.map((m) => m.id),
       read: ms.every((m) => m.read), foundAt: ms.map((m) => m.found_at).sort()[0], postedAt: null, time: '',
     });
   }
+  // Facebook shows the same post as a "post" and as a "listing" (different keys, same text): one card.
+  const byText = new Map<string, Post>();
+  for (const p of out.values()) {
+    const t = (p.text || '').replace(/\s+/g, ' ').trim();
+    if (t.length < 20) { byText.set(p.key, p); continue; }
+    const k = `${p.groupName}|${t}`;
+    const prev = byText.get(k);
+    if (!prev) { byText.set(k, p); continue; }
+    const [keep, drop] = prev.matches.length >= p.matches.length ? [prev, p] : [p, prev];
+    const names = new Set(keep.matches.map((m) => m.game_id));
+    const extra = drop.matches.filter((m) => !names.has(m.game_id));
+    byText.set(k, {
+      ...keep,
+      keys: [...keep.keys, ...drop.keys],
+      matches: [...keep.matches, ...extra], ids: [...keep.ids, ...drop.ids],
+      read: keep.read && drop.read,
+      images: keep.images.length ? keep.images : drop.images,
+      lineGames: { ...drop.lineGames, ...keep.lineGames },
+      foundAt: [keep.foundAt, drop.foundAt].sort()[0],
+      postedAt: [keep.postedAt, drop.postedAt].filter(Boolean).sort()[0] ?? null,
+    });
+  }
   const since = Date.now() - days * 864e5;
   const ms = (iso: string) => new Date(iso).getTime();
-  return [...out.values()]
+  return [...byText.values()]
     .map((p) => ({ ...p, time: p.postedAt || p.foundAt }))
     .filter((p) => ms(p.time) >= since)
     // Real post time first (Facebook's order). Posts with unknown time go last: they are older
