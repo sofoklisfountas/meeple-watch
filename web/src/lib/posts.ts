@@ -58,37 +58,64 @@ export function buildFeed(posts: FeedPost[], matches: Match[], days = FEED_DAYS)
       read: ms.every((m) => m.read), foundAt: ms.map((m) => m.found_at).sort()[0], postedAt: null, time: '',
     });
   }
-  // One card per ad: the same post saved twice (as "post" and "listing"), or cross-posted to several groups.
-  const byText = new Map<string, Post>();
-  for (const p of out.values()) {
-    const t = adSignature(p.text);
-    if (t.length < 40) { byText.set(p.key, p); continue; }
-    const k = t;
-    const prev = byText.get(k);
-    if (!prev) { byText.set(k, p); continue; }
-    const [keep, drop] = prev.matches.length >= p.matches.length ? [prev, p] : [p, prev];
-    const names = new Set(keep.matches.map((m) => m.game_id));
-    const extra = drop.matches.filter((m) => !names.has(m.game_id));
-    byText.set(k, {
-      ...keep,
-      keys: [...keep.keys, ...drop.keys],
-      groups: [...keep.groups, ...drop.groups.filter((g) => !keep.groups.some((x) => x.name === g.name))],
-      matches: [...keep.matches, ...extra], ids: [...keep.ids, ...drop.ids],
-      read: keep.read && drop.read,
-      images: keep.images.length ? keep.images : drop.images,
-      lineGames: { ...drop.lineGames, ...keep.lineGames },
-      foundAt: [keep.foundAt, drop.foundAt].sort()[0],
-      postedAt: [keep.postedAt, drop.postedAt].filter(Boolean).sort()[0] ?? null,
-    });
-  }
   const since = Date.now() - days * 864e5;
   const ms = (iso: string) => new Date(iso).getTime();
-  return [...byText.values()]
+  return mergeCopies([...out.values()])
     .map((p) => ({ ...p, time: p.postedAt || p.foundAt }))
     .filter((p) => ms(p.time) >= since)
     // Real post time first (Facebook's order). Posts with unknown time go last: they are older
     // posts we only saw once, so their first-seen time says nothing about when they were posted.
     .sort((a, b) => Number(!a.postedAt) - Number(!b.postedAt) || ms(b.time) - ms(a.time));
+}
+
+/** Facebook photo file name ("925846404_3300139220177911_..._n.jpg"): same file = same uploaded photo. */
+const photoId = (url: string) => (url.match(/\/([^/?]+\.(?:jpe?g|png|webp))/i) || [])[1] || null;
+
+/**
+ * One card per ad. Copies = the same post saved twice ("post" + "listing" key) or cross-posted to
+ * several groups. Two posts are copies when they have the same seller AND share a photo (Facebook
+ * reuses the uploaded files, so this survives badges, comments, SOLD marks and cut-off text),
+ * or, for posts without photos, the same text signature.
+ */
+export function mergeCopies(posts: Post[]): Post[] {
+  const parent = posts.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const seen = new Map<string, number>();
+  const link = (key: string, i: number) => {
+    const j = seen.get(key);
+    if (j === undefined) seen.set(key, i);
+    else parent[find(i)] = find(j);
+  };
+  posts.forEach((p, i) => {
+    const seller = (p.text || '').split('\n')[0].trim().toLowerCase();
+    for (const id of new Set(p.images.map(photoId))) if (id && seller) link(`img|${seller}|${id}`, i);
+    const sig = adSignature(p.text);
+    if (sig.length >= 40) link(`txt|${sig}`, i);
+  });
+  const sets = new Map<number, Post[]>();
+  posts.forEach((p, i) => sets.set(find(i), [...(sets.get(find(i)) || []), p]));
+
+  return [...sets.values()].map((copies) => {
+    if (copies.length === 1) return copies[0];
+    // Show the copy with most wishlist hits, then the cleanest text (shortest: no comments appended).
+    const [keep] = [...copies].sort((a, b) => b.matches.length - a.matches.length || (a.text || '').length - (b.text || '').length);
+    const games = new Set<string | null>();
+    const matches = copies.flatMap((c) => c.matches).filter((m) => !games.has(m.game_id) && !!games.add(m.game_id));
+    const groups: Post['groups'] = [];
+    for (const g of copies.flatMap((c) => c.groups)) if (!groups.some((x) => x.name === g.name)) groups.push(g);
+    return {
+      ...keep,
+      keys: copies.flatMap((c) => c.keys),
+      groups,
+      matches,
+      ids: copies.flatMap((c) => c.ids),
+      read: copies.every((c) => c.read),
+      images: keep.images.length ? keep.images : copies.find((c) => c.images.length)?.images || [],
+      lineGames: Object.assign({}, ...copies.map((c) => c.lineGames)),
+      foundAt: copies.map((c) => c.foundAt).sort()[0],
+      postedAt: copies.map((c) => c.postedAt).filter(Boolean).sort()[0] ?? null,
+    };
+  });
 }
 
 /**
