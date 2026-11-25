@@ -61,10 +61,9 @@ export function buildFeed(posts: FeedPost[], matches: Match[], days = FEED_DAYS)
   // One card per ad: the same post saved twice (as "post" and "listing"), or cross-posted to several groups.
   const byText = new Map<string, Post>();
   for (const p of out.values()) {
-    // Same ad = same start of text (seller + item lines), in any group; comments at the end may differ.
-    const t = (p.text || '').toLowerCase().replace(/\b(see less|see more)\b/g, '').replace(/\s+/g, ' ').trim();
+    const t = adSignature(p.text);
     if (t.length < 40) { byText.set(p.key, p); continue; }
-    const k = t.slice(0, 200);
+    const k = t;
     const prev = byText.get(k);
     if (!prev) { byText.set(k, p); continue; }
     const [keep, drop] = prev.matches.length >= p.matches.length ? [prev, p] : [p, prev];
@@ -90,6 +89,23 @@ export function buildFeed(posts: FeedPost[], matches: Match[], days = FEED_DAYS)
     // Real post time first (Facebook's order). Posts with unknown time go last: they are older
     // posts we only saw once, so their first-seen time says nothing about when they were posted.
     .sort((a, b) => Number(!a.postedAt) - Number(!b.postedAt) || ms(b.time) - ms(a.time));
+}
+
+/**
+ * Same ad = same seller + same start of the item lines, in any group. Comments at the end may differ,
+ * and Facebook adds per-group badge lines under the name ("Top voice", "Admin", "Rising contributor"),
+ * so short lines without numbers (1–3 words) are ignored.
+ */
+export function adSignature(text: string | null): string {
+  const lines = (text || '').toLowerCase()
+    .replace(/\b(see less|see more)\b/g, '')
+    // A copy may be marked sold in one group only.
+    .replace(/[([]?\s*(sold|reserved|πουλ[ηή]θηκε|πωλ[ηή]θηκε|κρατημένο)\s*[)\]]?/gu, '')
+    .split('\n')
+    .map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const [seller = '', ...rest] = lines;
+  const body = rest.filter((l) => /\d/.test(l) || l.split(' ').length > 3).join(' ');
+  return `${seller} ${body}`.slice(0, 200).trim();
 }
 
 /** "Today", "Yesterday", "Thursday 12 Nov". */
