@@ -5,6 +5,8 @@ export const FEED_DAYS = 7;
 /** One card per Facebook post: every post seen, plus the wishlist games it mentions (if any). */
 export interface Post {
   key: string;
+  /** Groups this ad appears in (cross-posted copies are one card). */
+  groups: { name: string | null; url: string; exactLink: boolean }[];
   /** All saved copies of this post (same post seen as "post" and "listing"). */
   keys: string[];
   url: string;
@@ -36,7 +38,7 @@ export function buildFeed(posts: FeedPost[], matches: Match[], days = FEED_DAYS)
   for (const p of posts) {
     const ms = byKey.get(p.id) || [];
     out.set(p.id, {
-      key: p.id, keys: [p.id], url: p.url, exactLink: p.exact_link, groupName: p.group_name, text: p.post_text,
+      key: p.id, keys: [p.id], groups: [{ name: p.group_name, url: p.url, exactLink: p.exact_link }], url: p.url, exactLink: p.exact_link, groupName: p.group_name, text: p.post_text,
       images: p.images || [], lineGames: p.line_games || {}, matches: ms, ids: ms.map((m) => m.id),
       read: ms.every((m) => m.read),
       // A wishlist hit may be older than the post row (saved before all posts were kept).
@@ -50,18 +52,19 @@ export function buildFeed(posts: FeedPost[], matches: Match[], days = FEED_DAYS)
     if (out.has(key)) continue;
     const first = ms.find((m) => m.post_text) || ms[0];
     out.set(key, {
-      key, keys: [key], url: first.url, exactLink: first.exact_link, groupName: first.group_name,
+      key, keys: [key], groups: [{ name: first.group_name, url: first.url, exactLink: first.exact_link }], url: first.url, exactLink: first.exact_link, groupName: first.group_name,
       text: first.post_text ?? (ms.some((m) => m.snippet) ? `\n${ms.map((m) => m.snippet).filter(Boolean).join('\n')}` : null),
       images: first.images || [], lineGames: first.line_games || {}, matches: ms, ids: ms.map((m) => m.id),
       read: ms.every((m) => m.read), foundAt: ms.map((m) => m.found_at).sort()[0], postedAt: null, time: '',
     });
   }
-  // Facebook shows the same post as a "post" and as a "listing" (different keys, same text): one card.
+  // One card per ad: the same post saved twice (as "post" and "listing"), or cross-posted to several groups.
   const byText = new Map<string, Post>();
   for (const p of out.values()) {
-    const t = (p.text || '').replace(/\s+/g, ' ').trim();
-    if (t.length < 20) { byText.set(p.key, p); continue; }
-    const k = `${p.groupName}|${t}`;
+    // Same ad = same start of text (seller + item lines), in any group; comments at the end may differ.
+    const t = (p.text || '').toLowerCase().replace(/\b(see less|see more)\b/g, '').replace(/\s+/g, ' ').trim();
+    if (t.length < 40) { byText.set(p.key, p); continue; }
+    const k = t.slice(0, 200);
     const prev = byText.get(k);
     if (!prev) { byText.set(k, p); continue; }
     const [keep, drop] = prev.matches.length >= p.matches.length ? [prev, p] : [p, prev];
@@ -70,6 +73,7 @@ export function buildFeed(posts: FeedPost[], matches: Match[], days = FEED_DAYS)
     byText.set(k, {
       ...keep,
       keys: [...keep.keys, ...drop.keys],
+      groups: [...keep.groups, ...drop.groups.filter((g) => !keep.groups.some((x) => x.name === g.name))],
       matches: [...keep.matches, ...extra], ids: [...keep.ids, ...drop.ids],
       read: keep.read && drop.read,
       images: keep.images.length ? keep.images : drop.images,

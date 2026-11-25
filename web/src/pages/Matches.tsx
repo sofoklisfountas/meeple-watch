@@ -56,8 +56,8 @@ export function Matches({ data, run, go }: { data: Data; run: Run; go: (p: Page)
       ...d, matches: d.matches.map((m) => (ids.includes(m.id) ? { ...m, read: true } : m)),
     }));
 
-  const open = (p: Post) => {
-    window.open(p.url, '_blank', 'noopener');
+  const open = (p: Post, url = p.url) => {
+    window.open(url, '_blank', 'noopener');
     if (!p.read) markRead(p.ids);
   };
 
@@ -79,7 +79,7 @@ export function Matches({ data, run, go }: { data: Data; run: Run; go: (p: Page)
       wishStats={wishStats}
       statsOf={statsOf}
       priceOf={priceOf}
-      onOpen={() => open(p)}
+      onOpen={(url) => open(p, url)}
       onRead={() => markRead(p.ids)}
       onDismiss={() => dismiss(p)}
     />
@@ -221,7 +221,7 @@ function PostCard({ p, reel, terms, wishStats, statsOf, priceOf, onOpen, onRead,
   wishStats: (gameId: string | null) => ReturnType<typeof mergeStats>;
   statsOf: (bggId: string) => ReturnType<typeof mergeStats>;
   priceOf: (bggId: string) => NewPrice | undefined;
-  onOpen: () => void;
+  onOpen: (url: string) => void;
   onRead: () => void;
   onDismiss: () => void;
 }) {
@@ -246,7 +246,7 @@ function PostCard({ p, reel, terms, wishStats, statsOf, priceOf, onOpen, onRead,
             <span className="truncate text-[14px] font-semibold">{author || 'Facebook post'}</span>
             {unread && <span className="h-2 w-2 shrink-0 rounded-full bg-indigo-500" title="New" />}
           </div>
-          <div className="truncate text-xs text-zinc-500">{p.groupName} · <span title={new Date(p.time).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })}>{p.postedAt ? timeAgo(p.postedAt) : `seen ${timeAgo(p.foundAt)}`}</span></div>
+          <div className="truncate text-xs text-zinc-500">{p.groups.map((g) => shortGroup(g.name)).join(' + ')} · <span title={new Date(p.time).toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'short' })}>{p.postedAt ? timeAgo(p.postedAt) : `seen ${timeAgo(p.foundAt)}`}</span></div>
         </div>
         <button
           onClick={onDismiss}
@@ -284,12 +284,19 @@ function PostCard({ p, reel, terms, wishStats, statsOf, priceOf, onOpen, onRead,
 
       {/* Footer */}
       <footer className={cx('flex items-center gap-1 border-t border-zinc-100 dark:border-zinc-800', reel ? 'mt-2 shrink-0 pt-2' : 'mt-4 pt-3')}>
-        <button
-          onClick={onOpen}
-          className="inline-flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 -ml-2 text-[13px] font-semibold text-indigo-600 transition hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-500/10"
-        >
-          {p.exactLink ? 'Open post' : 'Open group'} <ArrowUpRight size={15} />
-        </button>
+        <div className="-ml-2 flex min-w-0 flex-wrap items-center">
+          {p.groups.map((g) => (
+            <button
+              key={g.url}
+              onClick={() => onOpen(g.url)}
+              title={g.name || undefined}
+              className="inline-flex max-w-full cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-[13px] font-semibold text-indigo-600 transition hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-500/10"
+            >
+              <span className="truncate">{p.groups.length > 1 ? shortGroup(g.name) : g.exactLink ? 'Open post' : 'Open group'}</span>
+              <ArrowUpRight size={15} className="shrink-0" />
+            </button>
+          ))}
+        </div>
         {unread && (
           <button onClick={onRead} className="ml-auto inline-flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1 text-[13px] font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
             <Check size={15} /> Mark read
@@ -324,4 +331,9 @@ function Step({ done, icon, text, onClick }: { done: boolean; icon: React.ReactN
       <span className={cx(done && 'text-zinc-400 line-through')}>{text}</span>
     </button>
   );
+}
+
+/** "BoardGamesGR Offers - Προσφορές σε …" → "BoardGamesGR Offers". */
+function shortGroup(name: string | null) {
+  return (name || 'Facebook group').split(/\s+[-–|]\s+/)[0].trim();
 }
